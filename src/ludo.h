@@ -4,10 +4,10 @@ using namespace std;
 
 enum LudoColor {
 	none,
+	yellow,
+	green,
     red,
-    green,
     blue,
-    yellow
 };
 
 class LudoBoard {
