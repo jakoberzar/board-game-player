@@ -30,7 +30,7 @@ public:
 
 	static LudoColor getAt(int index, LudoColor myColor);
 
-	static bool setAt(int index, LudoColor myColor, int previous);
+	static bool setAt(int index, LudoColor myColor, int previous, LudoColor boardColor = none);
 
 	static LudoColor* getPtr(int index, LudoColor myColor);
 
@@ -39,6 +39,8 @@ public:
 	static bool removeFigure(int index, LudoColor myColor);
 
 	static bool isHome(int index, LudoColor myColor);
+
+	static void setOut(int count, LudoColor myColor);
 
 	static bool legitMove(int index, LudoColor myColor, int previous);
 

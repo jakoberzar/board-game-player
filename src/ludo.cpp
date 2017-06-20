@@ -59,31 +59,42 @@ LudoColor LudoBoard::getAt(int index, LudoColor myColor) {
 	}
 }
 
-bool LudoBoard::setAt(int index, LudoColor myColor, int previous) {
+bool LudoBoard::setAt(int index, LudoColor myColor, int previous, LudoColor boardColor) {
 	// Check if everything makes sense
 	int currentThere = getAt(index, myColor);
-	int previousPos = getAt(previous, myColor);
-	if (previousPos != myColor) {
-		throw std::invalid_argument("Previous position does not match the color!");
-		return false;
+	if (boardColor == none) boardColor = myColor;
+
+	if (previous != -1) {
+		int previousPos = getAt(previous, boardColor);
+		if (previousPos != myColor) {
+			throw std::invalid_argument("Previous position does not match the color!");
+			return false;
+		}
+		if (previous > index || index - previous > 6) {
+			throw std::invalid_argument("Invalid move!");
+			return false;
+		}
 	}
-	if (previous > index || index - previous > 6) {
-		throw std::invalid_argument("Invalid move!");
-		return false;
-	}
+
 	if (currentThere) {
 		cout << "Rekt " << currentThere << "!" << endl;
 		removeFigure(index, myColor);
 	}
 
 	// Set the color, code similar to getAt
-	LudoColor *color = getPtr(index, myColor);
+	LudoColor *color = getPtr(index, boardColor);
 	if (color != NULL) {
 		*color = myColor;
 	}
-	LudoColor *colorPrev = getPtr(previous, myColor);
-	if (color != NULL) {
-		*colorPrev = none;
+	
+	if (previous != -1) {
+		LudoColor *colorPrev = getPtr(previous, boardColor);
+		if (color != NULL) {
+			*colorPrev = none;
+		}
+	}
+	else {
+		out[myColor] -= 1;
 	}
 
 	return true;
@@ -142,6 +153,10 @@ bool LudoBoard::isHome(int index, LudoColor myColor) {
 	return setTillThere;
 }
 
+void LudoBoard::setOut(int count, LudoColor myColor) {
+	out[myColor - 1] = count;
+}
+
 bool LudoBoard::legitMove(int index, LudoColor myColor, int previous) {
 	// Check if everything makes sense
 	int currentThere = getAt(index, myColor);
@@ -159,27 +174,30 @@ bool LudoBoard::legitMove(int index, LudoColor myColor, int previous) {
 
 void LudoBoard::print() {
 	// Get the fields for out first
+	LudoColor topRight = blue;
+
 	char outFields[4][4];
-	for (int i = 0; i < 4; i++) {
+	int i = red - 1; // current color - index
+	for (int m = 0; m < 4; m++) {
 		// Each color
 		for (int j = 0; j < 4; j++) {
 			if (out[i] > j) {
-				outFields[i][j] = colorChar((LudoColor)(i + 1));
+				outFields[m][j] = colorChar((LudoColor)(i + 1));
 			}
 			else {
-				outFields[i][j] = colorChar((LudoColor)none);
+				outFields[m][j] = colorChar((LudoColor)none);
 			}
 		}
-
+		i = (i + 1) % 4;
 	}
 
 	char field[40];
 	for (int i = 0; i < 40; i++) {
-		field[i] = colorChar(getAt(i, green));
+		field[i] = colorChar(getAt(i, topRight));
 	}
 
-	// Order: R G
-	//        B Y
+	// Order: Y G
+	//        B R
 	printf("[%c][%c]      ---------      [%c][%c]\n",
 		outFields[0][0], outFields[0][1],
 		outFields[1][1], outFields[1][0]);
