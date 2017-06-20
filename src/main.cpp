@@ -63,7 +63,7 @@ Vec3b averageCirclePixel(Mat src, Point center, int radius) {
 
 bool isOfColor(Mat board, Vec3f circle) {
 	Point2i p1(cvRound(circle[0] - circle[2]), cvRound(circle[1] - circle[2]));
-	Point2i p2(cvRound(circle[0] + circle[2]), cvRound(circle[1] + circle[2]));
+	Point2i p2(cvFloor(circle[0] + circle[2]), cvFloor(circle[1] + circle[2]));
 	Rect r = Rect(p1, p2);
 	Mat mask, src, gray, tmp, edges;
 	mask = Mat(board.rows, board.cols, board.type());
@@ -72,8 +72,8 @@ bool isOfColor(Mat board, Vec3f circle) {
 	int index;
 	Vec2i grid = getGridPosition(circle);
 	char pos = getGridIndex(grid, &index);
-	//int radius = pos != 'h' ? cvRound(circle[2]) - 6: 5;
-	int radius = 5;
+	int radius = pos != 'h' ? cvRound(circle[2]) - 6: 5;
+	//int radius = 5;
 	cv::circle(mask, Point(cvRound(circle[0]), cvRound(circle[1])), radius, Scalar(255, 255, 255), -1, 8, 0);
 
 	(board).copyTo(src, mask);
@@ -442,7 +442,7 @@ int processFrame() {
 	vector<Vec3f> circles;
 	Mat boardBlackCircles = boardSrc.clone();
 	//HoughCircles(gray, circles, CV_HOUGH_GRADIENT, 1, par1, par2, par3, 5, 10);
-	HoughCircles(gray, circles, CV_HOUGH_GRADIENT, 1, 10, 20, 20, 15, 22);
+	HoughCircles(gray, circles, CV_HOUGH_GRADIENT, 1, 30, 20, 30, 13, 30);
 	for (size_t i = 0; i < circles.size(); i++)
 	{
 		Point center(cvRound(circles[i][0]), cvRound(circles[i][1]));
@@ -522,9 +522,9 @@ int processFrame() {
 	
 	imshow("Img", edges);
 	imshow("Win", boardSrc);
+	imshow("Green", greenBBGR);
 
 	waitKey(500);
-
 }
 
 	
@@ -535,7 +535,7 @@ int main(int argc, char *argv[])
 		camera = VideoCapture(0);
 	}
 	else {
-		camera = VideoCapture("video.mp4");
+		camera = VideoCapture("video2.mp4");
 	}
 
 	initCamera();
