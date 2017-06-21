@@ -8,6 +8,7 @@
 
 using namespace std;
 
+// Initializes the board (like a constructor)
 void LudoBoard::init() {
 	// Inititalize the field (should be a constructor in the future...
 	for (int i = 0; i < 4; i++) {
@@ -21,6 +22,7 @@ void LudoBoard::init() {
 	}
 }
 
+// Gets the pointer to the element on board at given index
 LudoColor* LudoBoard::getPtr(int index, LudoColor myColor) {
 	if (index < 0) {
 		throw invalid_argument("Index under 0, out of bounds!");
@@ -46,6 +48,7 @@ LudoColor* LudoBoard::getPtr(int index, LudoColor myColor) {
 
 }
 
+// Gets the color at given index
 LudoColor LudoBoard::getAt(int index, LudoColor myColor) {
 	LudoColor *color = getPtr(index, myColor);
 	if (color != NULL) {
@@ -53,6 +56,7 @@ LudoColor LudoBoard::getAt(int index, LudoColor myColor) {
 	}
 }
 
+// Sets the color at given index
 bool LudoBoard::setAt(int index, LudoColor myColor, int previous, LudoColor boardColor) {
 	// Check if everything makes sense
 	if (boardColor == none) boardColor = myColor;
@@ -94,6 +98,7 @@ bool LudoBoard::setAt(int index, LudoColor myColor, int previous, LudoColor boar
 	return true;
  }
 
+// Puts a figure of given color on the field
 bool LudoBoard::putOnField(LudoColor myColor) {
 	// First, check if the player has any figures left outside...
 	int colorNum = myColor - 1;
@@ -118,6 +123,7 @@ bool LudoBoard::putOnField(LudoColor myColor) {
 	return true;
 }
 
+// Removes a figure at given index from the field
 bool LudoBoard::removeFigure(int index, LudoColor myColor) {
 	int currentThere = getAt(index, myColor);
 	if (currentThere == NULL || currentThere == none) {
@@ -132,6 +138,7 @@ bool LudoBoard::removeFigure(int index, LudoColor myColor) {
 	}
 }
 
+// Tells if the given index is home
 bool LudoBoard::isHome(int index, LudoColor myColor) {
 	if (myColor == none) {
 		throw invalid_argument("Color is none!");
@@ -147,10 +154,12 @@ bool LudoBoard::isHome(int index, LudoColor myColor) {
 	return setTillThere;
 }
 
+// Setter for out array
 void LudoBoard::setOut(int count, LudoColor myColor) {
 	out[myColor - 1] = count;
 }
 
+// Checks if the suggested move is legit
 bool LudoBoard::legitMove(int index, LudoColor myColor, int previous) {
 	// Check if everything makes sense
 	int currentThere = getAt(index, myColor);
@@ -183,6 +192,7 @@ bool LudoBoard::boardLegit() {
 	return true;
 }
 
+// Prints the current board
 void LudoBoard::print() {
 	// Get the fields for out first
 	LudoColor topRight = blue;
@@ -254,6 +264,7 @@ void LudoBoard::print() {
 		outFields[2][1], outFields[2][0]);
 }
 
+// Returns the char representation of given color
 char LudoBoard::colorChar(LudoColor c) {
 	switch (c) {
 		case none:
@@ -271,6 +282,7 @@ char LudoBoard::colorChar(LudoColor c) {
 	}
 }
 
+// Compares a board with a different one.
 // Returns null if same, o if outside, h if home, g if grid
 string LudoBoard::diff(LudoBoard *other, int *index1, int *index2, int *index3) {
 	// Go through every player

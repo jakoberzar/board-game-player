@@ -5,32 +5,57 @@
 #include <random>
 #include "ludo.h"
 
+#define CAMERA_MODE false
+
 using namespace cv;
 using namespace std;
 
-// Function declarations
+// ----------------------
+// Function headers
+// ----------------------
+void initCamera();
+int processFrame();
+// Detection
+int circleOutside(Mat board, Vec3f circle);
+int circleHome(Mat board, Vec3f circle);
+bool extractBoard(Mat *wholeBoard, Mat *smallBoard, vector<Point> outside);
+vector<Point> findBoard(Mat *grayBoard);
 Vec2i getGridPosition(Vec3f circle);
 char getGridIndex(Vec2i gridPosition, int *index);
+void initColorMasks(Mat boardCircles);
+bool isOfColor(Mat board, Vec3f circle);
+void seperateOutsideCircles(Mat board, vector<Vec3f> all_circles, vector<Vec3f> *outside_circles, vector<Vec3f> *remaining);
+// Display
+void colorCirlces(Mat board, vector<Vec3f> circles, int thickness = -1);
+// Logical
+void putCirclesOnBoard(LudoBoard *lb, vector<Vec3f> circles, LudoColor color);
+void processDifferences();
+// Helper
+Vec3b averageCirclePixel(Mat src, Point center, int radius);
+int euclid(Point a, Point b);
+void on_trackbar(int, void*);
 
+// ----------------------
+// Global variables
+// ----------------------
+// Important stuff
+VideoCapture camera;  // ID of the (back) camera
+LudoBoard *lb, *oldBoard;
+LudoColor myPlayer = red;
 // Color masks
 Mat boardHSV, whiteBoard, redBoard, redBoard1, redBoard2, greenBoard, yellowBoard, blueBoard;
 Mat whiteBBGR, redBBGR, greenBBGR, yellowBBGR, blueBBGR;
-
-VideoCapture camera;  // ID of the (back) camera
-bool cameraMode = true;
-
-int par1, par2, par3, par4;
-
-Mat prevSrc;
-LudoBoard *lb, *oldBoard;
-LudoColor myPlayer = red;
-
+// AI stuff
 bool waitingForDiceRoll = false;
 bool waitingForMyPlayerMove = false;
 int myPlayerMove = 0;
+// Display stuff
 bool correctFrameShown = false;
 
-// Sliders
+// For sliders
+int par1, par2, par3, par4;
+
+// For improving color (hue) filters
 //const int slider_hue_max = 180;
 //const int slider_sat_max = 255;
 //const int slider_val_max = 255;
@@ -41,14 +66,50 @@ bool correctFrameShown = false;
 //int slider_up_sat = 225;
 //int slider_up_val = 255;
 
+// ----------------------
+// Methods
+// ----------------------
+int main(int argc, char *argv[])
+{
+	if (CAMERA_MODE) {
+		camera = VideoCapture(0);
+	}
+	else {
+		camera = VideoCapture("video2.mp4");
+	}
+
+	initCamera();
+
+	par1 = 10;
+	par2 = 20;
+	par3 = 20;
+	par4 = 20;
+
+	if (!CAMERA_MODE) {
+		namedWindow("Img", WINDOW_NORMAL);
+		resizeWindow("Img", 880, 500);
+		namedWindow("Win", WINDOW_NORMAL);
+		resizeWindow("Win", 500, 500);
+	}
+
+	oldBoard = new LudoBoard();
+	oldBoard->init();
+	while (true) {
+		processFrame();
+	}
+
+	return 0;
+}
+
+// Simple helper function for calculating distance between two points
 int euclid(Point a, Point b) {
 	return sqrt(pow((a.x - b.x), 2) + pow((a.y - b.y), 2));
 }
 
-void on_trackbar(int, void*)
-{
-}
+// Handler for opencv trackbar
+void on_trackbar(int, void*) { }
 
+// Calculates the values of an average value in given circle area
 Vec3b averageCirclePixel(Mat src, Point center, int radius) {
 	int startY = center.y - radius + 1;
 	int endY = center.y + radius - 1;
@@ -72,6 +133,8 @@ Vec3b averageCirclePixel(Mat src, Point center, int radius) {
 	return Vec3b(b, g, r);
 }
 
+// Tells whether the circle has content on given board.
+// The board should only show elements of a certain color.
 bool isOfColor(Mat board, Vec3f circle) {
 	Point2i p1(cvRound(circle[0] - circle[2]), cvRound(circle[1] - circle[2]));
 	Point2i p2(cvFloor(circle[0] + circle[2]), cvFloor(circle[1] + circle[2]));
@@ -136,7 +199,7 @@ int circleOutside(Mat board, Vec3f circle) {
 	return -1;
 }
 
-// Returns the index of home;
+// Returns the index of home. Deprecated.
 //   1
 // 0   2
 //   3
@@ -159,7 +222,8 @@ int circleHome(Mat board, Vec3f circle) {
 	}
 }
 
-void colorCirlces(Mat board, vector<Vec3f> circles, int thickness = -1) {
+// Color all the circles
+void colorCirlces(Mat board, vector<Vec3f> circles, int thickness) {
 	for (int i = 0; i < circles.size(); i++) {
 		Vec3f c =  circles[i];
 		Scalar s;
@@ -184,6 +248,7 @@ void colorCirlces(Mat board, vector<Vec3f> circles, int thickness = -1) {
 	}
 }
 
+// Initialize the color mask matrices and apply them
 void initColorMasks(Mat boardCircles) {
 	cvtColor(boardCircles, boardHSV, COLOR_BGR2HSV);
 	inRange(boardHSV, Scalar(75, 0, 135), Scalar(130, 115, 255), whiteBoard);
@@ -207,6 +272,7 @@ void initColorMasks(Mat boardCircles) {
 	boardCircles.copyTo(blueBBGR, blueBoard);
 }
 
+// Seperate outside circles from the others
 void seperateOutsideCircles(Mat board, vector<Vec3f> all_circles, vector<Vec3f> *outside_circles, vector<Vec3f> *remaining) {
 	int index_del = 0; // Adjust index for deleted members
 	for (int i = 0; i < all_circles.size(); i++) {
@@ -221,12 +287,13 @@ void seperateOutsideCircles(Mat board, vector<Vec3f> all_circles, vector<Vec3f> 
 	}
 }
 
+// Get the position of given element on the 11x11 grid
 Vec2i getGridPosition(Vec3f circle) {
 	double singleWidth = 500.0 / 11.0;
 	return Vec2i(circle[0] / singleWidth, circle[1] / singleWidth);
 }
 
-// Returns g if it is on grid, h if on home, null if not
+// Returns g if it is on grid, h if on home, null if not. Stores the field location in index parameter
 char getGridIndex(Vec2i gridPosition, int *index) {
 	int x = gridPosition[0];
 	int y = gridPosition[1];
@@ -290,6 +357,7 @@ char getGridIndex(Vec2i gridPosition, int *index) {
 	return 'g';
 }
 
+// Puts the circles on the logical board
 void putCirclesOnBoard(LudoBoard *lb, vector<Vec3f> circles, LudoColor color) {
 	for (int i = 0; i < circles.size(); i++) {
 		Vec3f circle = circles[i];
@@ -310,6 +378,7 @@ void putCirclesOnBoard(LudoBoard *lb, vector<Vec3f> circles, LudoColor color) {
 	}
 }
 
+// Enables picture mode, for taking pictures (for debugging help)
 void takePictureMode() {
 	while (true)
 	{
@@ -327,6 +396,7 @@ void takePictureMode() {
 	}
 }
 
+// Inits the camera
 void initCamera() {
 	if (!camera.isOpened())
 	{
@@ -337,6 +407,7 @@ void initCamera() {
 	camera.set(CV_CAP_PROP_CONTRAST, 0.5);
 }
 
+// Finds the game board on the screen
 vector<Point> findBoard(Mat *grayBoard) {
 	vector<vector<Point>> countours;
 	vector<Point> outside;
@@ -367,6 +438,7 @@ vector<Point> findBoard(Mat *grayBoard) {
 	return outside;
 }
 
+// Extracts the board from the whole board. Returns if given board is okay
 bool extractBoard(Mat *wholeBoard, Mat *smallBoard, vector<Point> outside) {
 	Mat src = *wholeBoard;
 	Mat boardSrc, gray;
@@ -413,6 +485,7 @@ bool extractBoard(Mat *wholeBoard, Mat *smallBoard, vector<Point> outside) {
 
 }
 
+// Processes differences between previous frame board and current frame board
 void processDifferences() {
 	int index1, index2, index3;
 	string diff = oldBoard->diff(lb, &index1, &index2, &index3);
@@ -459,6 +532,7 @@ void processDifferences() {
 	}
 }
 
+// Process a frame
 int processFrame() {
 	Mat src, gray, tmp, edges;
 
@@ -471,7 +545,7 @@ int processFrame() {
 	cvtColor(src, gray, CV_BGR2GRAY);
 	GaussianBlur(gray, tmp, Size(3, 3), 3, 3);
 	Canny(tmp, edges, 30, 200, 3);
-	
+
 	vector<Point> outside = findBoard(&edges);
 
 	// Get the board only
@@ -479,13 +553,13 @@ int processFrame() {
 	bool usingOld = false;
 	if (outside.size() < 4) {
 		cout << ".";
-		if (cameraMode) {
+		if (CAMERA_MODE) {
 			imshow("Img", edges);
 		}
 		else {
 			imshow("Img", src);
 		}
-		
+
 		waitKey(1);
 		return -1;
 	}
@@ -554,12 +628,12 @@ int processFrame() {
 	// Game logic stuff
 	lb = new LudoBoard();
 	lb->init();
-	/*LudoColorLogic colors[4];
+	LudoColorLogic colors[4];
 	for (int i = 1; i < 5; i++) {
 		colors[i - 1] = LudoColorLogic((LudoColor)i);
 	}
-	colors[blue - 1].isAI = true;
-	int current = 0;*/
+	colors[red - 1].isAI = true;
+	int current = 0;
 
 	// Recognize grid positions;
 	putCirclesOnBoard(lb, circles_left_red, red);
@@ -573,6 +647,7 @@ int processFrame() {
 	lb->setOut(outside_blue.size(), blue);
 	lb->setOut(outside_yellow.size(), yellow);
 
+	// Determine whether the board actually makes sense (in case some circle was not detected)
 	bool legit = lb->boardLegit();
 
 	if (!legit && !correctFrameShown) {
@@ -581,12 +656,10 @@ int processFrame() {
 	}
 
 	if (legit) {
-
 		// If waiting for dice, do stuff here
 		if (waitingForDiceRoll) {
 			Rect area = Rect(225, 225, 50, 50);
 			Mat diceMat = gray(area);
-			//GaussianBlur(gray, tmp, Size(1, 1), 3, 3);
 			Canny(diceMat, edges, 30, 200, 3);
 			vector<vector<Point>> countours;
 			findContours(edges, countours, 0, 2);
@@ -611,6 +684,7 @@ int processFrame() {
 			}
 			if (!waitingForMyPlayerMove) { cout << "?"; }
 
+			// For now, try throwing a dice yourself
 			random_device rd;
 			mt19937 rng(rd());
 			uniform_int_distribution<int> uni(1, 6);
@@ -627,7 +701,7 @@ int processFrame() {
 			cout << "Please move my player for " << myPlayerMove << " spaces!" << endl;
 		}
 
-		// Normal stuff
+		// Show stuff
 		imshow("Img", src);
 		imshow("Win", boardSrc);
 
@@ -638,41 +712,7 @@ int processFrame() {
 	waitKey(100);
 }
 
-	
-
-int main(int argc, char *argv[])
-{
-	if (cameraMode) {
-		camera = VideoCapture(0);
-	}
-	else {
-		camera = VideoCapture("video2.mp4");
-	}
-
-	initCamera();
-
-	par1 = 10;
-	par2 = 20;
-	par3 = 20;
-	par4 = 20;
-
-	if (!cameraMode) {
-		namedWindow("Img", WINDOW_NORMAL);
-		resizeWindow("Img", 880, 500);
-		namedWindow("Win", WINDOW_NORMAL);
-		resizeWindow("Win", 500, 500);
-	}
-
-	oldBoard = new LudoBoard();
-	oldBoard->init();
-	while (true) {
-		processFrame();
-	}
-
-	return 0;
-}
-
-
+// Code for tweaking the hue parameters.
 /*
 while (true) {
 inRange(boardHSV, Scalar(slider_hue, slider_sat, slider_val), Scalar(slider_up_hue, slider_up_sat, slider_up_val), greenBoard);

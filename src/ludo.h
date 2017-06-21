@@ -26,7 +26,7 @@ public:
 
 	}
 
-	void init(); // Should be non static in future
+	void init();
 
 	LudoColor getAt(int index, LudoColor myColor);
 
