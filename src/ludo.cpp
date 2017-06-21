@@ -8,12 +8,6 @@
 
 using namespace std;
 
-//int out[4] = {4, 4, 4, 4};
-//
-//LudoColor tracks[4][10] = {};
-//
-//LudoColor homes[4][4] = {};
-
 void LudoBoard::init() {
 	// Inititalize the field (should be a constructor in the future...
 	for (int i = 0; i < 4; i++) {
@@ -183,14 +177,9 @@ bool LudoBoard::boardLegit() {
 			}
 		}
 		if (count != 4) {
-			//cout << endl;
 			return false;
 		}
-		else {
-			//cout << myColor << ":" << count << " ";
-		}
 	}
-	//cout << endl;
 	return true;
 }
 
@@ -283,36 +272,49 @@ char LudoBoard::colorChar(LudoColor c) {
 }
 
 // Returns null if same, o if outside, h if home, g if grid
-string LudoBoard::diff(LudoBoard *other, int *index1, int *index2) {
-	// Check homes
+string LudoBoard::diff(LudoBoard *other, int *index1, int *index2, int *index3) {
+	// Go through every player
+	bool illegal = false;
+	string ret = "";
 	for (int c = 0; c < 4; c++) {
-		for (int i = 0; i < 4; i++) {
-			if (homes[c][i] != other->homes[c][i]) {
-				*index1 = c;
-				*index2 = i;
-				return "home";
-			}
-		}
-	}
-
-	// Check grid
-	for (int c = 0; c < 4; c++) {
-		for (int i = 0; i < 10; i++) {
-			if (tracks[c][i] != other->tracks[c][i]) {
-				*index1 = c;
-				*index2 = i;
-				return "grid";
-			}
-		}
-	}
-
-	// Check outside
-	for (int i = 0; i < 4; i++) {
-		if (out[i] != other->out[i]) {
-			*index1 = i;
-			*index2 = other->out[i];
+		LudoColor myColor = (LudoColor)(c + 1);
+		// Check the number of figures outside
+		if (out[c] != other->out[c]) {
+			*index1 = c;
+			*index2 = other->out[c];
+			*index3 = out[c];
 			return "outside";
 		}
+		else {
+			// Look for changes in field
+			int figuresHere = out[c];
+			int figuresThere = other->out[c];
+			int oldIndex = -1;
+			for (int i = 0; i < FIELD_LEN; i++) {
+				if (getAt(i, myColor) == myColor && other->getAt(i, myColor) != myColor) {
+					if (other->getAt(i, myColor) == none) {
+						// The figure has probably just been moved...
+						oldIndex = i;
+						*index3 = i;
+					}
+					else {
+						// Some figure crashed mine but the number of my figures outside didn't change???
+						cout << "Some figure crashed " << colorChar(myColor) << " at " << i << " but its out count didnt change?";
+						return "illegal";
+					}
+					figuresHere++;
+				}
+				else if (getAt(i, myColor) == none && other->getAt(i, myColor) == myColor) {
+					// The figure was moved to this field
+					*index2 = i;
+					*index1 = c;
+					return "grid";
+				}
+				
+			}
+					
+		}
+
 	}
 
 	return "\0";	

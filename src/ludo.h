@@ -50,7 +50,7 @@ public:
 
 	static char colorChar(LudoColor c);
 
-	string diff(LudoBoard *other, int *index, int *index2);
+	string diff(LudoBoard *other, int *index, int *index2, int *index3);
 
 private:
 };

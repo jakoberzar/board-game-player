@@ -2,6 +2,7 @@
 #include <opencv2/imgproc.hpp>
 #include <opencv2/imgcodecs.hpp>
 #include <iostream>
+#include <random>
 #include "ludo.h"
 
 using namespace cv;
@@ -173,9 +174,6 @@ void colorCirlces(Mat board, vector<Vec3f> circles, int thickness = -1) {
 		else if (isOfColor(yellowBBGR, c)) {
 			s = Scalar(0, 255, 255);
 		}
-		//else if (isOfColor(whiteBBGR, c)) {
-		//	s = Scalar(0, 0, 0);
-		//}
 		else {
 			s = Scalar(0, 0, 0);
 		}
@@ -390,7 +388,13 @@ int processFrame() {
 	bool usingOld = false;
 	if (outside.size() < 4) {
 		cout << ".";
-		imshow("Img", edges);
+		if (cameraMode) {
+			imshow("Img", edges);
+		}
+		else {
+			imshow("Img", src);
+		}
+		
 		waitKey(1);
 		// Use previous frame
 		if (prevSrc.cols > 0) {
@@ -483,7 +487,6 @@ int processFrame() {
 			circles_white.push_back(c);
 			s = Scalar(0, 0, 0);
 		}
-		//putText(boardSrc, to_string(i), center, 0, 0.35, s, 2);
 		circle(boardSrc, center, radius, s, 2, 8, 0);
 	}
 
@@ -564,7 +567,18 @@ int processFrame() {
 			if (!waitingForMyPlayerMove) { cout << "?"; }
 
 			// Temporary fix...
-			myPlayerMove = 3;
+
+			random_device rd;
+			mt19937 rng(rd());
+			uniform_int_distribution<int> uni(1, 6);
+			int random_integer = uni(rng);
+			int together_move = random_integer;
+			while (random_integer == 6) {
+				cout << "Woah, I got a 6!" << endl;
+				random_integer = uni(rng);
+				together_move += random_integer;
+			}
+			myPlayerMove = together_move;
 			waitingForDiceRoll = false;
 			waitingForMyPlayerMove = true;
 			cout << "Please move my player for " << myPlayerMove << " spaces!" << endl;
@@ -572,27 +586,40 @@ int processFrame() {
 
 
 		// Normal stuff
-		imshow("Img", edges);
+		imshow("Img", src);
 		imshow("Win", boardSrc);
 
-		int index1, index2;
-		string diff = lb->diff(oldBoard, &index1, &index2);
+		int index1, index2, index3;
+		string diff = oldBoard->diff(lb, &index1, &index2, &index3);
 
-		if (waitingForDiceRoll && diff != "\0") {
-			cout << "You just skipped me!!! :o" << endl;
+		if (waitingForDiceRoll || waitingForMyPlayerMove && diff != "\0") {
+			cout << endl << "You just skipped me!!! :o" << endl;
+			cout << "Please move my player for " << myPlayerMove << " spaces!" << endl;
 		}
 
 		if (waitingForMyPlayerMove && diff != "\0") {
 			if (index1 + 1 == myPlayer) {
-				cout << "Thank you for moving my player!" << endl;
+				cout << "Thank you for moving my player for " << index2 - index3 << " spaces!" << endl;
 				waitingForMyPlayerMove = false;
 			}
 		}
 
 		if (diff != "\0") {
-			cout << endl << "There was a change on " << diff 
-				 << " of player " << lb->colorChar((LudoColor)(index1 + 1)) 
-				 << " on field " << index2 << endl;
+			char colorChanged = lb->colorChar((LudoColor)(index1 + 1));
+			cout << endl;
+			if (diff == "outside") {
+				cout << "Player " << colorChanged << "'s outside count changed ";
+				cout << "from " << index3 << " to " << index2;
+			}
+			else if (diff == "grid") {
+				cout << "Player " << colorChanged << "'s figure moved ";
+				cout << "from " << index3 << " to " << index2;
+			}
+			else if (diff == "illegal") {
+				cout << "Something illegal happened!";
+			}
+			cout << endl;
+
 			lb->print();
 
 			oldBoard = lb;
@@ -602,10 +629,13 @@ int processFrame() {
 				cout << "Please throw a dice for me :)?" << endl;
 			}
 		}
+		else {
+			cout << ":";
+		}
 
 		correctFrameShown = true;
 	}
-	waitKey(200);
+	waitKey(100);
 }
 
 	
@@ -616,7 +646,7 @@ int main(int argc, char *argv[])
 		camera = VideoCapture(0);
 	}
 	else {
-		camera = VideoCapture("video3.mp4");
+		camera = VideoCapture("video2.mp4");
 	}
 
 	initCamera();
@@ -626,12 +656,15 @@ int main(int argc, char *argv[])
 	par3 = 20;
 	par4 = 20;
 
-	//namedWindow("Img", WINDOW_NORMAL);
-	//resizeWindow("Img", 880, 500);
-	//namedWindow("Win", WINDOW_NORMAL);
-	//resizeWindow("Win", 500, 500);
+	if (!cameraMode) {
+		namedWindow("Img", WINDOW_NORMAL);
+		resizeWindow("Img", 880, 500);
+		namedWindow("Win", WINDOW_NORMAL);
+		resizeWindow("Win", 500, 500);
+	}
 
 	oldBoard = new LudoBoard();
+	oldBoard->init();
 	while (true) {
 		processFrame();
 	}
