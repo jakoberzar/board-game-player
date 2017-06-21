@@ -13,40 +13,44 @@ enum LudoColor {
 class LudoBoard {
 public:
 	// The whities
-	static LudoColor tracks[4][10];
+	LudoColor tracks[4][10];
 	// The homes
-	static LudoColor homes[4][4];
+	LudoColor homes[4][4];
 	// Out of playing field
-	static int out[4];
+	int out[4];
 
 	LudoBoard() {
 
-	}; // Disallow creation
+	};
 	~LudoBoard() {
 
 	}
 
-	static void init(); // Should be non static in future
+	void init(); // Should be non static in future
 
-	static LudoColor getAt(int index, LudoColor myColor);
+	LudoColor getAt(int index, LudoColor myColor);
 
-	static bool setAt(int index, LudoColor myColor, int previous, LudoColor boardColor = none);
+	bool setAt(int index, LudoColor myColor, int previous, LudoColor boardColor = none);
 
-	static LudoColor* getPtr(int index, LudoColor myColor);
+	LudoColor* getPtr(int index, LudoColor myColor);
 
-	static bool putOnField(LudoColor color);
+	bool putOnField(LudoColor color);
 
-	static bool removeFigure(int index, LudoColor myColor);
+	bool removeFigure(int index, LudoColor myColor);
 
-	static bool isHome(int index, LudoColor myColor);
+	bool isHome(int index, LudoColor myColor);
 
-	static void setOut(int count, LudoColor myColor);
+	void setOut(int count, LudoColor myColor);
 
-	static bool legitMove(int index, LudoColor myColor, int previous);
+	bool legitMove(int index, LudoColor myColor, int previous);
 
-	static void print();
+	bool boardLegit();
+
+	void print();
 
 	static char colorChar(LudoColor c);
+
+	string diff(LudoBoard *other, int *index, int *index2);
 
 private:
 };
@@ -55,6 +59,7 @@ private:
 class LudoColorLogic {
 public:
     LudoColor myColor;
+	LudoBoard *board;
 	bool isAI;
 
 	LudoColorLogic() {};
@@ -65,9 +70,9 @@ public:
 
 class LudoAI {
 public:
-	LudoColorLogic boardLogic;
+	LudoColorLogic *boardLogic;
 
-	LudoAI(LudoColorLogic lgl);
+	LudoAI(LudoColorLogic *lgl);
 
 	int getNewPos(int diceThrow);
 };

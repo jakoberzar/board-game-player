@@ -14,9 +14,19 @@ char getGridIndex(Vec2i gridPosition, int *index);
 // Color masks
 Mat boardHSV, whiteBoard, redBoard, redBoard1, redBoard2, greenBoard, yellowBoard, blueBoard;
 Mat whiteBBGR, redBBGR, greenBBGR, yellowBBGR, blueBBGR;
+
 VideoCapture camera;  // ID of the (back) camera
-bool cameraMode = false;
+bool cameraMode = true;
+
 int par1, par2, par3, par4;
+
+LudoBoard *lb, *oldBoard;
+LudoColor myPlayer = red;
+
+bool waitingForDiceRoll = false;
+bool waitingForMyPlayerMove = false;
+int myPlayerMove = 0;
+bool correctFrameShown = false;
 
 // Sliders
 //const int slider_hue_max = 180;
@@ -36,7 +46,6 @@ int euclid(Point a, Point b) {
 void on_trackbar(int, void*)
 {
 }
-
 
 Vec3b averageCirclePixel(Mat src, Point center, int radius) {
 	int startY = center.y - radius + 1;
@@ -77,6 +86,10 @@ bool isOfColor(Mat board, Vec3f circle) {
 	cv::circle(mask, Point(cvRound(circle[0]), cvRound(circle[1])), radius, Scalar(255, 255, 255), -1, 8, 0);
 
 	(board).copyTo(src, mask);
+	if (r.x + r.width > 500) r.width = 500 - r.x;
+	if (r.y + r.height > 500) r.height = 500 - r.y;
+	if (r.y < 0) r.y = 0;
+	if (r.x < 0) r.x = 0;
 	src = src(r);
 
 	cvtColor(src, gray, CV_BGR2GRAY);
@@ -179,7 +192,7 @@ void initColorMasks(Mat boardCircles) {
 	inRange(boardHSV, Scalar(135, 70, 100), Scalar(180, 255, 255), redBoard2);
 	bitwise_or(redBoard1, redBoard2, redBoard);
 	inRange(boardHSV, Scalar(20, 90, 100), Scalar(35, 255, 255), yellowBoard);
-	inRange(boardHSV, Scalar(45, 70, 00), Scalar(90, 255, 255), greenBoard);
+	inRange(boardHSV, Scalar(40, 60, 00), Scalar(90, 255, 255), greenBoard);
 	inRange(boardHSV, Scalar(100, 80, 0), Scalar(135, 255, 255), blueBoard);
 
 	greenBBGR.setTo(Scalar(0, 0, 0));
@@ -235,7 +248,7 @@ char getGridIndex(Vec2i gridPosition, int *index) {
 	}
 	if (y == 5 && x > 0 && x < 10) {
 		if (x < 5) {
-			*index = y - 1;
+			*index = x - 1;
 		}
 		else if (x > 5) {
 			*index = 3 - (x - 6);
@@ -327,15 +340,6 @@ void initCamera() {
 
 Mat prevSrc;
 int processFrame() {
-	// Game logic stuff
-	LudoBoard lb = LudoBoard();
-	LudoColorLogic colors[4];
-	for (int i = 1; i < 5; i++) {
-		colors[i - 1] = LudoColorLogic((LudoColor)i);
-	}
-	colors[blue - 1].isAI = true;
-	int current = 0;
-
 	// Do actual image processing yay
 
 	// Get the source
@@ -347,6 +351,7 @@ int processFrame() {
 
 	if (!src.data) {
 		cout << "Could not read image!";
+		exit(0);
 	}
 
 	cvtColor(src, gray, CV_BGR2GRAY);
@@ -368,7 +373,7 @@ int processFrame() {
 			double dist2 = euclid(res[0], res[2]);
 			double dist3 = euclid(res[0], res[3]);
 			double eucl = max(max(dist1, dist2), dist3);
-			double const MIN_SIZE = 0.3;
+			double const MIN_SIZE = 0.5;
 			drawContours(src, countours, i, (0, 255, 0), 1);
 
 			// Only get the biggest rectangle
@@ -384,8 +389,8 @@ int processFrame() {
 	Mat boardSrc;
 	bool usingOld = false;
 	if (outside.size() < 4) {
-		cout << "Skipping frame, could not find the table" << endl;
-		imshow("Img", src);
+		cout << ".";
+		imshow("Img", edges);
 		waitKey(1);
 		// Use previous frame
 		if (prevSrc.cols > 0) {
@@ -427,7 +432,8 @@ int processFrame() {
 		// Check that it has enough circles
 		vector<Vec3f> circles;
 		cvtColor(boardSrc, gray, CV_BGR2GRAY);
-		HoughCircles(gray, circles, CV_HOUGH_GRADIENT, 1, 10, 20, 20, 15, 22);
+		HoughCircles(gray, circles, CV_HOUGH_GRADIENT, 1, 30, 20, 30, 13, 30);
+		//colorCirlces(src, circles);
 		if (circles.size() <= 4) {
 			return -1;
 		}
@@ -437,11 +443,9 @@ int processFrame() {
 
 	// Get the circles from the picture
 	cvtColor(boardSrc, gray, CV_BGR2GRAY);
-	//Canny(gray, edges, 50, 200, 3);
 
 	vector<Vec3f> circles;
 	Mat boardBlackCircles = boardSrc.clone();
-	//HoughCircles(gray, circles, CV_HOUGH_GRADIENT, 1, par1, par2, par3, 5, 10);
 	HoughCircles(gray, circles, CV_HOUGH_GRADIENT, 1, 30, 20, 30, 13, 30);
 	for (size_t i = 0; i < circles.size(); i++)
 	{
@@ -452,7 +456,6 @@ int processFrame() {
 
 	// Detect the colors of circles
 	initColorMasks(boardSrc);
-
 
 	vector<Vec3f> circles_white, circles_red, circles_yellow, circles_green, circles_blue;
 	for (int i = 0; i < circles.size(); i++) {
@@ -476,15 +479,11 @@ int processFrame() {
 			circles_yellow.push_back(c);
 			s = Scalar(0, 255, 255);
 		}
-		/*else if (isOfColor(&whiteBBGR, c)) {
-			s = Scalar(0, 0, 0);
-		}*/
 		else {
-			//cout << "Unknown circle..." << endl;
 			circles_white.push_back(c);
 			s = Scalar(0, 0, 0);
 		}
-		putText(boardSrc, to_string(i), center, 0, 0.35, s, 2);
+		//putText(boardSrc, to_string(i), center, 0, 0.35, s, 2);
 		circle(boardSrc, center, radius, s, 2, 8, 0);
 	}
 
@@ -499,32 +498,114 @@ int processFrame() {
 
 	seperateOutsideCircles(boardSrc, circles_white, &outside_white, &circles_left_white);
 
-	colorCirlces(boardSrc, outside_red);
-	colorCirlces(boardSrc, outside_green);
-	colorCirlces(boardSrc, outside_blue);
-	colorCirlces(boardSrc, outside_yellow);
-	colorCirlces(boardSrc, outside_white);
+	//colorCirlces(boardSrc, outside_red);
+	//colorCirlces(boardSrc, outside_green);
+	//colorCirlces(boardSrc, outside_blue);
+	//colorCirlces(boardSrc, outside_yellow);
+	//colorCirlces(boardSrc, outside_white);
 
+	// Game logic stuff
+	lb = new LudoBoard();
+	lb->init();
+	/*LudoColorLogic colors[4];
+	for (int i = 1; i < 5; i++) {
+		colors[i - 1] = LudoColorLogic((LudoColor)i);
+	}
+	colors[blue - 1].isAI = true;
+	int current = 0;*/
 
 	// Recognize grid positions;
-	putCirclesOnBoard(&lb, circles_left_red, red);
-	putCirclesOnBoard(&lb, circles_left_blue, blue);
-	putCirclesOnBoard(&lb, circles_left_green, green);
-	putCirclesOnBoard(&lb, circles_left_yellow, yellow);
+	putCirclesOnBoard(lb, circles_left_red, red);
+	putCirclesOnBoard(lb, circles_left_blue, blue);
+	putCirclesOnBoard(lb, circles_left_green, green);
+	putCirclesOnBoard(lb, circles_left_yellow, yellow);
 
 	// Set the outside on the logical ludo board (to not mess with code)
-	lb.setOut(outside_red.size(), red);
-	lb.setOut(outside_green.size(), green);
-	lb.setOut(outside_blue.size(), blue);
-	lb.setOut(outside_yellow.size(), yellow);
+	lb->setOut(outside_red.size(), red);
+	lb->setOut(outside_green.size(), green);
+	lb->setOut(outside_blue.size(), blue);
+	lb->setOut(outside_yellow.size(), yellow);
 
-	lb.print();
-	
-	imshow("Img", edges);
-	imshow("Win", boardSrc);
-	imshow("Green", greenBBGR);
+	bool legit = lb->boardLegit();
+	if (!legit && !correctFrameShown) {
+		imshow("Win", boardSrc);
+		waitKey(1);
+	}
 
-	waitKey(500);
+	if (legit) {
+
+		// If waiting for dice, do stuff here
+		if (waitingForDiceRoll) {
+			Rect area = Rect(225, 225, 50, 50);
+			Mat diceMat = gray(area);
+			//GaussianBlur(gray, tmp, Size(1, 1), 3, 3);
+			Canny(diceMat, edges, 30, 200, 3);
+			vector<vector<Point>> countours;
+			findContours(edges, countours, 0, 2);
+
+			vector<Point> outside;
+			for (int i = 0; i < countours.size(); i++) {
+				vector<Point> cnt = countours.at(i);
+				vector<Point> res;
+				approxPolyDP(cnt, res, 0.01 * arcLength(cnt, true), true);
+				if (res.size() == 4) {
+					Rect bound = boundingRect(res);
+					HoughCircles(gray(bound), circles, CV_HOUGH_GRADIENT, 1, 1, 20, 30, 1, 3);
+					if (circles.size() > 0) {
+						cout << "Looks like I threw " << circles.size() << "!" << endl;
+						cout << "Move my first player!" << endl;
+						waitingForMyPlayerMove = true;
+						myPlayerMove = circles.size();
+						waitingForDiceRoll = false;
+						break;
+					}
+				}
+			}
+			if (!waitingForMyPlayerMove) { cout << "?"; }
+
+			// Temporary fix...
+			myPlayerMove = 3;
+			waitingForDiceRoll = false;
+			waitingForMyPlayerMove = true;
+			cout << "Please move my player for " << myPlayerMove << " spaces!" << endl;
+		}
+
+
+		// Normal stuff
+		imshow("Img", edges);
+		imshow("Win", boardSrc);
+
+		int index1, index2;
+		string diff = lb->diff(oldBoard, &index1, &index2);
+
+		if (waitingForDiceRoll && diff != "\0") {
+			cout << "You just skipped me!!! :o" << endl;
+		}
+
+		if (waitingForMyPlayerMove && diff != "\0") {
+			if (index1 + 1 == myPlayer) {
+				cout << "Thank you for moving my player!" << endl;
+				waitingForMyPlayerMove = false;
+			}
+		}
+
+		if (diff != "\0") {
+			cout << endl << "There was a change on " << diff 
+				 << " of player " << lb->colorChar((LudoColor)(index1 + 1)) 
+				 << " on field " << index2 << endl;
+			lb->print();
+
+			oldBoard = lb;
+
+			if (index1 + 2 == myPlayer || index1 == 4 && myPlayer == 1) {
+				waitingForDiceRoll = true;
+				cout << "Please throw a dice for me :)?" << endl;
+			}
+		}
+
+		correctFrameShown = true;
+	}
+	waitKey(200);
 }
 
 	
@@ -535,7 +616,7 @@ int main(int argc, char *argv[])
 		camera = VideoCapture(0);
 	}
 	else {
-		camera = VideoCapture("video2.mp4");
+		camera = VideoCapture("video3.mp4");
 	}
 
 	initCamera();
@@ -545,11 +626,12 @@ int main(int argc, char *argv[])
 	par3 = 20;
 	par4 = 20;
 
-	namedWindow("Img", WINDOW_NORMAL);
-	resizeWindow("Img", 880, 500);
-	namedWindow("Win", WINDOW_NORMAL);
-	resizeWindow("Win", 500, 500);
+	//namedWindow("Img", WINDOW_NORMAL);
+	//resizeWindow("Img", 880, 500);
+	//namedWindow("Win", WINDOW_NORMAL);
+	//resizeWindow("Win", 500, 500);
 
+	oldBoard = new LudoBoard();
 	while (true) {
 		processFrame();
 	}

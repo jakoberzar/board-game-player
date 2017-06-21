@@ -8,11 +8,11 @@
 
 using namespace std;
 
-int LudoBoard::out[4] = {4, 4, 4, 4};
-
-LudoColor LudoBoard::tracks[4][10] = {};
-
-LudoColor LudoBoard::homes[4][4] = {};
+//int out[4] = {4, 4, 4, 4};
+//
+//LudoColor tracks[4][10] = {};
+//
+//LudoColor homes[4][4] = {};
 
 void LudoBoard::init() {
 	// Inititalize the field (should be a constructor in the future...
@@ -61,8 +61,8 @@ LudoColor LudoBoard::getAt(int index, LudoColor myColor) {
 
 bool LudoBoard::setAt(int index, LudoColor myColor, int previous, LudoColor boardColor) {
 	// Check if everything makes sense
-	int currentThere = getAt(index, myColor);
 	if (boardColor == none) boardColor = myColor;
+	int currentThere = getAt(index, boardColor);
 
 	if (previous != -1) {
 		int previousPos = getAt(previous, boardColor);
@@ -76,7 +76,7 @@ bool LudoBoard::setAt(int index, LudoColor myColor, int previous, LudoColor boar
 		}
 	}
 
-	if (currentThere) {
+	if (currentThere > none) {
 		cout << "Rekt " << currentThere << "!" << endl;
 		removeFigure(index, myColor);
 	}
@@ -86,7 +86,7 @@ bool LudoBoard::setAt(int index, LudoColor myColor, int previous, LudoColor boar
 	if (color != NULL) {
 		*color = myColor;
 	}
-	
+
 	if (previous != -1) {
 		LudoColor *colorPrev = getPtr(previous, boardColor);
 		if (color != NULL) {
@@ -172,6 +172,28 @@ bool LudoBoard::legitMove(int index, LudoColor myColor, int previous) {
 	return true;
 }
 
+// Checks that the board is in a legit state
+bool LudoBoard::boardLegit() {
+	for (int i = 1; i < 5; i++) {
+		int count = out[i - 1]; // Add my figures that are outside
+		LudoColor myColor = (LudoColor)i;
+		for (int j = 0; j < FIELD_LEN; j++) {
+			if (getAt(j, myColor) == myColor) {
+				count++;
+			}
+		}
+		if (count != 4) {
+			//cout << endl;
+			return false;
+		}
+		else {
+			//cout << myColor << ":" << count << " ";
+		}
+	}
+	//cout << endl;
+	return true;
+}
+
 void LudoBoard::print() {
 	// Get the fields for out first
 	LudoColor topRight = blue;
@@ -191,6 +213,16 @@ void LudoBoard::print() {
 		i = (i + 1) % 4;
 	}
 
+	char homeFields[4][4];
+	i = blue - 1; // current color - index
+	for (int m = 0; m < 4; m++) {
+		// Each color
+		for (int j = 0; j < 4; j++) {
+			homeFields[m][j] = colorChar(homes[i][j]);
+		}
+		i = (i + 1) % 4;
+	}
+
 	char field[40];
 	for (int i = 0; i < 40; i++) {
 		field[i] = colorChar(getAt(i, topRight));
@@ -205,25 +237,25 @@ void LudoBoard::print() {
 		outFields[0][2], outFields[0][3],
 		field[38], field[39], field[0],
 		outFields[1][3], outFields[1][2]);
-	printf("            |%c|[%c]|%c|\n", field[37], colorChar(homes[1][0]), field[1]);
-	printf("            |%c|[%c]|%c|\n", field[36], colorChar(homes[1][1]), field[2]);
-	printf("------------|%c|[%c]|%c|------------\n", field[35], colorChar(homes[1][2]), field[3]);
+	printf("            |%c|[%c]|%c|\n", field[37], homeFields[0][0], field[1]);
+	printf("            |%c|[%c]|%c|\n", field[36], homeFields[0][1], field[2]);
+	printf("------------|%c|[%c]|%c|------------\n", field[35], homeFields[0][2], field[3]);
 	printf("|%c||%c||%c||%c||%c|[%c]|%c||%c||%c||%c||%c|\n",
 		field[30], field[31], field[32], field[33], field[34],
-		colorChar(homes[1][3]),
+		homeFields[0][3],
 		field[4], field[5], field[6], field[7], field[8]);
 	printf("|%c|[%c][%c][%c][%c]   [%c][%c][%c][%c]|%c|\n",
 		field[29],
-		colorChar(homes[0][0]), colorChar(homes[0][1]), colorChar(homes[0][2]), colorChar(homes[0][3]),
-		colorChar(homes[2][0]), colorChar(homes[2][1]), colorChar(homes[2][2]), colorChar(homes[2][3]),
+		homeFields[3][0], homeFields[3][1], homeFields[3][2], homeFields[3][3],
+		homeFields[1][3], homeFields[1][2], homeFields[1][1], homeFields[1][0],
 		field[9]);
 	printf("|%c||%c||%c||%c||%c|[%c]|%c||%c||%c||%c||%c|\n",
 		field[28], field[27], field[26], field[25], field[24],
-		colorChar(homes[3][3]),
+		homeFields[2][3],
 		field[14], field[13], field[12], field[11], field[10]);
-	printf("------------|%c|[%c]|%c|------------\n", field[23], colorChar(homes[3][2]), field[15]);
-	printf("            |%c|[%c]|%c|\n", field[22], colorChar(homes[3][1]), field[16]);
-	printf("            |%c|[%c]|%c|\n", field[21], colorChar(homes[3][0]), field[17]);
+	printf("------------|%c|[%c]|%c|------------\n", field[23], homeFields[2][2], field[15]);
+	printf("            |%c|[%c]|%c|\n", field[22], homeFields[2][1], field[16]);
+	printf("            |%c|[%c]|%c|\n", field[21], homeFields[2][0], field[17]);
 	printf("[%c][%c]      |%c||%c||%c|      [%c][%c]\n",
 		outFields[3][2], outFields[3][3],
 		field[20], field[19], field[18],
@@ -250,6 +282,43 @@ char LudoBoard::colorChar(LudoColor c) {
 	}
 }
 
+// Returns null if same, o if outside, h if home, g if grid
+string LudoBoard::diff(LudoBoard *other, int *index1, int *index2) {
+	// Check homes
+	for (int c = 0; c < 4; c++) {
+		for (int i = 0; i < 4; i++) {
+			if (homes[c][i] != other->homes[c][i]) {
+				*index1 = c;
+				*index2 = i;
+				return "home";
+			}
+		}
+	}
+
+	// Check grid
+	for (int c = 0; c < 4; c++) {
+		for (int i = 0; i < 10; i++) {
+			if (tracks[c][i] != other->tracks[c][i]) {
+				*index1 = c;
+				*index2 = i;
+				return "grid";
+			}
+		}
+	}
+
+	// Check outside
+	for (int i = 0; i < 4; i++) {
+		if (out[i] != other->out[i]) {
+			*index1 = i;
+			*index2 = other->out[i];
+			return "outside";
+		}
+	}
+
+	return "\0";	
+}
+
+
 LudoColorLogic::LudoColorLogic(LudoColor color) {
 	if (color == none) {
 		throw invalid_argument("Wrong color for a ludo color logic!");
@@ -260,32 +329,32 @@ LudoColorLogic::LudoColorLogic(LudoColor color) {
 vector<int> LudoColorLogic::getMyFigures(LudoColor intColor) {
 	vector<int> vec(4);
 	for (int i = 0; i < FIELD_LEN; i++) {
-		LudoColor color = LudoBoard::getAt(i, intColor);
+		LudoColor color = board->getAt(i, intColor);
 		if (color == myColor) {
 			vec.push_back(i);
 		}
 	}
-	if (vec.size() != 4 - LudoBoard::out[intColor - 1]) {
+	if (vec.size() != 4 - board->out[intColor - 1]) {
 		cout << "Problem with the number of figures out and on board for " << intColor << endl;
 	}
 	return vec;
 }
 
-LudoAI::LudoAI(LudoColorLogic lgl) {
+LudoAI::LudoAI(LudoColorLogic *lgl) {
 	boardLogic = lgl;
 }
 
 int LudoAI::getNewPos(int diceThrow) {
-	vector<int> figures = boardLogic.getMyFigures(boardLogic.myColor);
+	vector<int> figures = boardLogic->getMyFigures(boardLogic->myColor);
 	vector<int>::iterator it;
 	int figureToMove = -1;
 	for (it = figures.begin(); it < figures.end(); it++) {
 		int figure = *it;
-		if (LudoBoard::legitMove(figure + diceThrow, boardLogic.myColor, figure)) {
+		if (boardLogic->board->legitMove(figure + diceThrow, boardLogic->myColor, figure)) {
 			figureToMove = figure;
 		}
 	}
 	int newPos = figureToMove == -1 ? diceThrow : figureToMove + diceThrow;
-	LudoBoard::setAt(newPos, boardLogic.myColor, figureToMove);
+	boardLogic->board->setAt(newPos, boardLogic->myColor, figureToMove);
 	return newPos;
 }
