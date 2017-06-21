@@ -21,6 +21,7 @@ bool cameraMode = true;
 
 int par1, par2, par3, par4;
 
+Mat prevSrc;
 LudoBoard *lb, *oldBoard;
 LudoColor myPlayer = red;
 
@@ -336,31 +337,14 @@ void initCamera() {
 	camera.set(CV_CAP_PROP_CONTRAST, 0.5);
 }
 
-Mat prevSrc;
-int processFrame() {
-	// Do actual image processing yay
-
-	// Get the source
-	Mat src, gray, tmp, edges;
-	camera.read(src);
-
-	int bigCols = src.cols * 0.3;
-	int bigRows = src.rows * 0.3;
-
-	if (!src.data) {
-		cout << "Could not read image!";
-		exit(0);
-	}
-
-	cvtColor(src, gray, CV_BGR2GRAY);
-
-	GaussianBlur(gray, tmp, Size(3, 3), 3, 3);
-	Canny(tmp, edges, 30, 200, 3);
+vector<Point> findBoard(Mat *grayBoard) {
 	vector<vector<Point>> countours;
-	findContours(edges, countours, 0, 2);
-
 	vector<Point> outside;
-	int rectCountourIndex = 0;
+	Mat edges = *grayBoard;
+	double const MIN_SIZE = 0.3;
+	int bigCols = edges.cols * MIN_SIZE;
+	int bigRows = edges.rows * MIN_SIZE;
+	findContours(edges, countours, 0, 2);
 	double maxEuclid = 0;
 	for (int i = 0; i < countours.size(); i++) {
 		vector<Point> cnt = countours.at(i);
@@ -371,17 +355,124 @@ int processFrame() {
 			double dist2 = euclid(res[0], res[2]);
 			double dist3 = euclid(res[0], res[3]);
 			double eucl = max(max(dist1, dist2), dist3);
-			double const MIN_SIZE = 0.5;
-			drawContours(src, countours, i, (0, 255, 0), 1);
+			drawContours(edges, countours, i, (0, 255, 0), 1);
 
 			// Only get the biggest rectangle
-			if (dist1 > bigCols * MIN_SIZE && dist2 > bigRows * MIN_SIZE && eucl && eucl > maxEuclid) {
+			if (dist1 > bigCols && dist2 > bigRows && eucl && eucl > maxEuclid) {
 				outside = res;
 				maxEuclid = eucl;
-				rectCountourIndex = i;
 			}
 		}
 	}
+	return outside;
+}
+
+bool extractBoard(Mat *wholeBoard, Mat *smallBoard, vector<Point> outside) {
+	Mat src = *wholeBoard;
+	Mat boardSrc, gray;
+
+	// Find the one that is the most top left - so it stays in same position
+	Rect outsideRect = boundingRect(outside);
+	int startingI = 0;
+	int diff = outsideRect.height + outsideRect.width;
+	for (int i = 0; i < outside.size(); i++) {
+		int xi = outside[i].x - outsideRect.x;
+		int yi = outside[i].y - outsideRect.y;
+		int myDiff = xi + yi;
+		if (myDiff < diff) {
+			startingI = i;
+			diff = myDiff;
+		}
+	}
+	vector<Point2f> pts1;
+	int count = 0;
+	while (count < 4) {
+		int i = (count + startingI) % 4;
+		pts1.push_back(Point2f(outside[i].x, outside[i].y));
+		count++;
+	}
+
+	// Transform the image to a nice square
+	vector<Point2f> pts2 = { Point2f(0, 0), Point2f(0, 500), Point2f(500, 500), Point2f(500, 0) };
+	Mat M = getPerspectiveTransform(pts1, pts2);
+	warpPerspective(src, boardSrc, M, Size(500, 500));
+
+	// Check that it has enough circles
+	vector<Vec3f> circles;
+	cvtColor(boardSrc, gray, CV_BGR2GRAY);
+	HoughCircles(gray, circles, CV_HOUGH_GRADIENT, 1, 30, 20, 30, 13, 30);
+	//colorCirlces(src, circles);
+	*smallBoard = boardSrc;
+
+	if (circles.size() <= 4) {
+		return false;
+	}
+	else {
+		return true;
+	}
+
+}
+
+void processDifferences() {
+	int index1, index2, index3;
+	string diff = oldBoard->diff(lb, &index1, &index2, &index3);
+
+	if (waitingForDiceRoll || waitingForMyPlayerMove && diff != "\0") {
+		cout << endl << "You just skipped me!!! :o" << endl;
+		cout << "Please move my player for " << myPlayerMove << " spaces!" << endl;
+	}
+
+	if (waitingForMyPlayerMove && diff != "\0") {
+		if (index1 + 1 == myPlayer) {
+			cout << "Thank you for moving my player for " << index2 - index3 << " spaces!" << endl;
+			waitingForMyPlayerMove = false;
+		}
+	}
+
+	if (diff != "\0") {
+		char colorChanged = lb->colorChar((LudoColor)(index1 + 1));
+		cout << endl;
+		if (diff == "outside") {
+			cout << "Player " << colorChanged << "'s outside count changed ";
+			cout << "from " << index3 << " to " << index2;
+		}
+		else if (diff == "grid") {
+			cout << "Player " << colorChanged << "'s figure moved ";
+			cout << "from " << index3 << " to " << index2;
+		}
+		else if (diff == "illegal") {
+			cout << "Something illegal happened!";
+		}
+		cout << endl;
+
+		lb->print();
+
+		oldBoard = lb;
+
+		if (index1 + 2 == myPlayer || index1 == 4 && myPlayer == 1) {
+			waitingForDiceRoll = true;
+			cout << "Please throw a dice for me :)?" << endl;
+		}
+	}
+	else {
+		cout << ":";
+	}
+}
+
+int processFrame() {
+	Mat src, gray, tmp, edges;
+
+	camera.read(src);
+	if (!src.data) {
+		cout << "Could not read image!";
+		exit(0);
+	}
+
+	cvtColor(src, gray, CV_BGR2GRAY);
+	GaussianBlur(gray, tmp, Size(3, 3), 3, 3);
+	Canny(tmp, edges, 30, 200, 3);
+	
+	vector<Point> outside = findBoard(&edges);
 
 	// Get the board only
 	Mat boardSrc;
@@ -396,53 +487,12 @@ int processFrame() {
 		}
 		
 		waitKey(1);
-		// Use previous frame
-		if (prevSrc.cols > 0) {
-			boardSrc = prevSrc;
-			usingOld = true;
-		}
-		else {
-			return -1;
-		}
 		return -1;
 	}
 	else {
-		// Find the one that is the most top left - so it stays in same position
-		Rect outsideRect = boundingRect(outside);
-		int startingI = 0;
-		int diff = outsideRect.height + outsideRect.width;
-		for (int i = 0; i < outside.size(); i++) {
-			int xi = outside[i].x - outsideRect.x;
-			int yi = outside[i].y - outsideRect.y;
-			int myDiff = xi + yi;
-			if (myDiff < diff) {
-				startingI = i;
-				diff = myDiff;
-			}
-		}
-		vector<Point2f> pts1;
-		int count = 0;
-		while (count < 4) {
-			int i = (count + startingI) % 4;
-			pts1.push_back(Point2f(outside[i].x, outside[i].y));
-			count++;
-		}
-
-		// Transform the image to a nice square
-		vector<Point2f> pts2 = { Point2f(0, 0), Point2f(0, 500), Point2f(500, 500), Point2f(500, 0)};
-		Mat M = getPerspectiveTransform(pts1, pts2);
-		warpPerspective(src, boardSrc, M, Size(500, 500));
-
-		// Check that it has enough circles
-		vector<Vec3f> circles;
-		cvtColor(boardSrc, gray, CV_BGR2GRAY);
-		HoughCircles(gray, circles, CV_HOUGH_GRADIENT, 1, 30, 20, 30, 13, 30);
-		//colorCirlces(src, circles);
-		if (circles.size() <= 4) {
+		if (!extractBoard(&src, &boardSrc, outside)) {
 			return -1;
 		}
-
-		prevSrc = boardSrc;
 	}
 
 	// Get the circles from the picture
@@ -501,12 +551,6 @@ int processFrame() {
 
 	seperateOutsideCircles(boardSrc, circles_white, &outside_white, &circles_left_white);
 
-	//colorCirlces(boardSrc, outside_red);
-	//colorCirlces(boardSrc, outside_green);
-	//colorCirlces(boardSrc, outside_blue);
-	//colorCirlces(boardSrc, outside_yellow);
-	//colorCirlces(boardSrc, outside_white);
-
 	// Game logic stuff
 	lb = new LudoBoard();
 	lb->init();
@@ -530,6 +574,7 @@ int processFrame() {
 	lb->setOut(outside_yellow.size(), yellow);
 
 	bool legit = lb->boardLegit();
+
 	if (!legit && !correctFrameShown) {
 		imshow("Win", boardSrc);
 		waitKey(1);
@@ -566,8 +611,6 @@ int processFrame() {
 			}
 			if (!waitingForMyPlayerMove) { cout << "?"; }
 
-			// Temporary fix...
-
 			random_device rd;
 			mt19937 rng(rd());
 			uniform_int_distribution<int> uni(1, 6);
@@ -584,54 +627,11 @@ int processFrame() {
 			cout << "Please move my player for " << myPlayerMove << " spaces!" << endl;
 		}
 
-
 		// Normal stuff
 		imshow("Img", src);
 		imshow("Win", boardSrc);
 
-		int index1, index2, index3;
-		string diff = oldBoard->diff(lb, &index1, &index2, &index3);
-
-		if (waitingForDiceRoll || waitingForMyPlayerMove && diff != "\0") {
-			cout << endl << "You just skipped me!!! :o" << endl;
-			cout << "Please move my player for " << myPlayerMove << " spaces!" << endl;
-		}
-
-		if (waitingForMyPlayerMove && diff != "\0") {
-			if (index1 + 1 == myPlayer) {
-				cout << "Thank you for moving my player for " << index2 - index3 << " spaces!" << endl;
-				waitingForMyPlayerMove = false;
-			}
-		}
-
-		if (diff != "\0") {
-			char colorChanged = lb->colorChar((LudoColor)(index1 + 1));
-			cout << endl;
-			if (diff == "outside") {
-				cout << "Player " << colorChanged << "'s outside count changed ";
-				cout << "from " << index3 << " to " << index2;
-			}
-			else if (diff == "grid") {
-				cout << "Player " << colorChanged << "'s figure moved ";
-				cout << "from " << index3 << " to " << index2;
-			}
-			else if (diff == "illegal") {
-				cout << "Something illegal happened!";
-			}
-			cout << endl;
-
-			lb->print();
-
-			oldBoard = lb;
-
-			if (index1 + 2 == myPlayer || index1 == 4 && myPlayer == 1) {
-				waitingForDiceRoll = true;
-				cout << "Please throw a dice for me :)?" << endl;
-			}
-		}
-		else {
-			cout << ":";
-		}
+		processDifferences();
 
 		correctFrameShown = true;
 	}
